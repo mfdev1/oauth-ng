@@ -6,8 +6,8 @@ describe('AuthInterceptor', function() {
 	
 	beforeEach(module('oauth'));
 	
-	var expires_at = '2014-08-17T17:38:37.584Z';
-	var fragment = 'access_token=token&token_type=bearer&expires_in=7200&state=/path&extra=stuff'
+	//var expires_at = '2014-08-17T17:38:37.584Z';
+	var fragment = 'access_token=token&token_type=bearer&expires_in=7200&state=/path&extra=stuff';
 	
 	
 	beforeEach(function() {
@@ -16,13 +16,13 @@ describe('AuthInterceptor', function() {
 			theOAuthConfigurationProvider = OAuthConfigurationProvider;
 			theOAuthConfigurationProvider.init({protectedResources:['http://api.protected']}, $httpProvider);
 			theOAuthConfiguration = theOAuthConfigurationProvider.$get();
-		})
+		});
 		module('oauth', 'test.app.config');
 		
 		inject(function() {});
-	})
+	});
 	
-	beforeEach(inject(function() { OAuthConfiguration = theOAuthConfiguration }));
+	beforeEach(inject(function() { OAuthConfiguration = theOAuthConfiguration; }));
 	beforeEach(inject(function($injector) { $location = $injector.get('$location'); }));
 	beforeEach(inject(function($injector) { AccessToken = $injector.get('AccessToken'); AccessToken.destroy(); } ));
 	beforeEach(inject(function($injector) { AuthInterceptor = $injector.get('AuthInterceptor'); }));
@@ -67,4 +67,4 @@ describe('AuthInterceptor', function() {
 		});
 	});
 	
-})
+});
