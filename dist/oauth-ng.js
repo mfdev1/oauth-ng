@@ -1,9 +1,10 @@
-/* oauth-ng - v0.4.2 - 2015-08-27 */
+/* oauth-ng - v0.4.2 - 2015-11-24 */
 
 'use strict';
 
 // App libraries
 angular.module('oauth', [
+  'base64',
   'oauth.directive',      // login directive
   'oauth.accessToken',    // access token service
   'oauth.endpoint',       // oauth endpoint service
@@ -21,13 +22,15 @@ angular.module('oauth', [
 
 var accessTokenService = angular.module('oauth.accessToken', []);
 
-accessTokenService.factory('AccessToken', ['Storage', '$rootScope', '$location', '$interval', function(Storage, $rootScope, $location, $interval){
+accessTokenService.factory('AccessToken', ['Storage', '$rootScope', '$location', '$interval', '$log', '$base64', function(Storage, $rootScope, $location, $interval, $log, $base64){
 
   var service = {
+    issuer: null, // TODO: need?
+    clientId: null, // TODO: same
     token: null
   },
   oAuth2HashTokens = [ //per http://tools.ietf.org/html/rfc6749#section-4.2.2
-    'access_token', 'token_type', 'expires_in', 'scope', 'state',
+    'access_token', 'id_token', 'token_type', 'expires_in', 'scope', 'state',
     'error','error_description'
   ];
 
@@ -43,7 +46,11 @@ accessTokenService.factory('AccessToken', ['Storage', '$rootScope', '$location',
    * - takes the token from the fragment URI
    * - takes the token from the sessionStorage
    */
-  service.set = function(){
+  service.set = function(scope){
+    // copy directive attributes
+    this.issuer = scope.site;
+    this.clientId = scope.clientId;
+
     this.setTokenFromString($location.hash());
 
     //If hash is present in URL always use it, cuz its coming from oAuth2 provider redirect
@@ -78,15 +85,29 @@ accessTokenService.factory('AccessToken', ['Storage', '$rootScope', '$location',
   service.setTokenFromString = function(hash){
     var params = getTokenFromString(hash);
 
-    if(params){
-      removeFragment();
-      setToken(params);
-      setExpiresAt();
-      // We have to save it again to make sure expires_at is set
-      //  and the expiry event is set up properly
-      setToken(this.token);
-      $rootScope.$broadcast('oauth:login', service.token);
+    if (!params) {
+      return; // TODO: Exception ?
     }
+
+    var claims;
+    if (params.id_token) {
+      claims = validateIdToken(params.id_token);
+    }
+
+    if (!claims) {
+      return; // TODO: Exception ?
+    }
+
+    removeFragment();
+    setToken(params);
+
+    service.token.idTokenClaims = claims;
+
+    setExpiresAt();
+    // We have to save it again to make sure expires_at is set
+    //  and the expiry event is set up properly
+    setToken(this.token);
+    $rootScope.$broadcast('oauth:login', service.token);
   };
 
   /* * * * * * * * * *
@@ -189,6 +210,76 @@ accessTokenService.factory('AccessToken', ['Storage', '$rootScope', '$location',
     });
 
     $location.hash(curHash);
+  };
+
+  /**
+   * validate id token
+   * TODO: false or claims returnable like a PHP. I don't like
+   * @param idToken
+   * @param accessToken
+   * @returns {boolean}
+   */
+  var validateIdToken = function(idToken, accessToken){
+    var tokenParts = idToken.split('.');
+    var claimsBase64 = padBase64(tokenParts[1]);
+    var claimsJson = $base64.decode(claimsBase64);
+    var claims = JSON.parse(claimsJson);
+    var savedNonce = localStorage.getItem('nonce');
+
+    if (claims.aud !== service.clientId) {
+      $log.warn('Wrong audience: ' + claims.aud);
+      return false;
+    }
+
+    if (service.issuer && claims.iss !== service.issuer) {
+      $log.warn('Wrong issuer: ' + claims.iss);
+      return false;
+    }
+
+    if (savedNonce && claims.nonce !== savedNonce) {
+      $log.warn('Wrong nonce: ' + claims.nonce);
+      return false;
+    }
+
+    //if (accessToken && !this.checkAtHash(accessToken, claims)) { // TODO: implement
+    //  $log.warn('Wrong at_hash');
+    //  return false;
+    //}
+
+    var now = Date.now();
+    var issuedAtMSec = claims.iat * 1000;
+    var expiresAtMSec = claims.exp * 1000;
+
+    var tenMinutesInMsec = 1000 * 60 * 10;
+
+    if (issuedAtMSec - tenMinutesInMsec >= now  || expiresAtMSec + tenMinutesInMsec <= now) {
+      $log.warn('Token has been expired');
+      $log.warn({
+        now: now,
+        issuedAtMSec: issuedAtMSec,
+        expiresAtMSec: expiresAtMSec
+      });
+      return false;
+    }
+
+    //localStorage.setItem('id_token', idToken);
+    //localStorage.setItem('id_token_claims_obj', claimsJson);
+    //localStorage.setItem('id_token_expires_at', expiresAtMSec);
+    //
+    //if (this.validationHandler) {
+    //  this.validationHandler(idToken)
+    //}
+
+    //return true;
+
+    return claims;
+  };
+
+  var padBase64 = function (base64data) {
+    while (base64data.length % 4 !== 0) {
+      base64data += '=';
+    }
+    return base64data;
   };
 
   return service;
@@ -352,7 +443,7 @@ oauthConfigurationService.provider('OAuthConfiguration', function() {
 		};
 	};
 })
-.factory('AuthInterceptor', function($q, $rootScope, OAuthConfiguration, AccessToken) {
+.factory('AuthInterceptor', ['OAuthConfiguration', 'AccessToken', function(OAuthConfiguration, AccessToken) {
 	return {
 		'request': function(config) {
 			OAuthConfiguration.getConfig().protectedResources.forEach(function(resource) {
@@ -369,7 +460,7 @@ oauthConfigurationService.provider('OAuthConfiguration', function() {
 			return config;
 		}
 	};
-});
+}]);
 'use strict';
 
 var interceptorService = angular.module('oauth.interceptor', []);
