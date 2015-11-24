@@ -2,6 +2,7 @@
 
 // App libraries
 angular.module('oauth', [
+  'base64',
   'oauth.directive',      // login directive
   'oauth.accessToken',    // access token service
   'oauth.endpoint',       // oauth endpoint service

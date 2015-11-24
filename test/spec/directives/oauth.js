@@ -2,7 +2,7 @@
 
 describe('oauth', function() {
 
-  var $rootScope, $location, Storage, $httpBackend, $compile, AccessToken, Endpoint, element, scope, result, callback;
+  var $rootScope, $location, Storage, $httpBackend, $compile, AccessToken, Endpoint, element, scope, result, callback, base64;
 
   var fragment = 'access_token=token&token_type=bearer&expires_in=7200&state=/path';
   var denied = 'error=access_denied&error_description=error';
@@ -19,6 +19,7 @@ describe('oauth', function() {
   beforeEach(inject(function($injector) { $httpBackend = $injector.get('$httpBackend'); }));
   beforeEach(inject(function($injector) { AccessToken = $injector.get('AccessToken'); }));
   beforeEach(inject(function($injector) { Endpoint = $injector.get('Endpoint'); }));
+  beforeEach(inject(function($injector) { base64 = $injector.get('$base64'); }));
 
   beforeEach(function() {
     element = angular.element(
